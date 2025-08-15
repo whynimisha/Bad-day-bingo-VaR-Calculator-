@@ -1,0 +1,102 @@
+{
+  "portfolio_value": 55765.00048828125,
+  "params": {
+    "window_days": 250,
+    "scenarios": 20000
+  },
+  "flags": {
+    "mode": "t",
+    "df": 6,
+    "horizon": 1,
+    "rho_stress": 0.0,
+    "drift": "0",
+    "seed": null,
+    "ci_level": null,
+    "liq_haircut_bp": 0.0
+  },
+  "VaR": {
+    "95": 972.0813619105913,
+    "99": 1571.9369236949842
+  },
+  "CVaR": {
+    "95": 1350.8303640130055,
+    "99": 2002.9325655062578
+  },
+  "as_pct_of_portfolio": {
+    "VaR95_pct": 1.7431746676212612,
+    "VaR99_pct": 2.8188593381709364
+  },
+  "current_prices": {
+    "RELIANCE.NS": 1373.800048828125,
+    "TCS.NS": 3022.300048828125,
+    "HDFCBANK.NS": 1991.0999755859375
+  },
+  "daily_volatility": {
+    "RELIANCE.NS": 0.01323197532224789,
+    "TCS.NS": 0.012635596477300936,
+    "HDFCBANK.NS": 0.011221812062126484
+  },
+  "liquidity": {
+    "haircut_bp": 0.0,
+    "haircut_abs": 0.0
+  },
+  "stress_all_down": [
+    {
+      "Shock": "-1\u03c3 all assets",
+      "P&L": -679.0372632150418
+    },
+    {
+      "Shock": "-2\u03c3 all assets",
+      "P&L": -1358.0745264300836
+    },
+    {
+      "Shock": "-3\u03c3 all assets",
+      "P&L": -2037.1117896451256
+    }
+  ],
+  "multi_horizon": [
+    {
+      "horizon_days": 1,
+      "VaR95": 986.1489066112368,
+      "CVaR95": 1380.6878118247628,
+      "VaR99": 1574.9252143692338,
+      "CVaR99": 2089.060103576237
+    },
+    {
+      "horizon_days": 5,
+      "VaR95": 2179.560516507174,
+      "CVaR95": 3093.4868715505895,
+      "VaR99": 3665.4984022370886,
+      "CVaR99": 4645.55827444641
+    },
+    {
+      "horizon_days": 10,
+      "VaR95": 3120.573148721161,
+      "CVaR95": 4335.468091129356,
+      "VaR99": 5036.729670481821,
+      "CVaR99": 6460.5561765776765
+    },
+    {
+      "horizon_days": 20,
+      "VaR95": 4473.402041141764,
+      "CVaR95": 6193.50341968473,
+      "VaR99": 7077.757308656852,
+      "CVaR99": 9158.723692768595
+    }
+  ],
+  "backtest": {
+    "alpha": 0.95,
+    "n_obs": 1,
+    "breaches": 0,
+    "hit_rate_pct": 0.0,
+    "kupiec": {
+      "LR": 0.10258658872372804,
+      "p_value": 0.7487474326235579
+    },
+    "christoffersen": {
+      "LR": NaN,
+      "p_value": NaN
+    },
+    "basel_zone_99": "N/A (Basel uses 99%)"
+  }
+}
