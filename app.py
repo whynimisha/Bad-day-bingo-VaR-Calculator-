@@ -2,8 +2,7 @@
 import os, json, tempfile, subprocess, sys
 import streamlit as st
 import pandas as pd  # optional, but fine to keep
-
-# ---------- debug vars live in session state ----------
+git commit -m "UI: add title & caption"
 st.session_state.setdefault("dbg_cmd", None)
 st.session_state.setdefault("dbg_cwd", None)
 
