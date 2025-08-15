@@ -1,11 +1,10 @@
 # app.py
 import os, json, tempfile, subprocess, sys
 import streamlit as st
-import pandas as pd  # optional, but fine to keep
-git commit -m "UI: add title & caption"
+import pandas as pd  
+
 st.session_state.setdefault("dbg_cmd", None)
 st.session_state.setdefault("dbg_cwd", None)
-
 ENGINE = os.path.join(os.path.dirname(__file__), "var_engine.py")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "outputs")
 RESULTS_JSON = os.path.join(OUTPUT_DIR, "results.json")
@@ -13,7 +12,6 @@ RESULTS_JSON = os.path.join(OUTPUT_DIR, "results.json")
 st.set_page_config(page_title="VaR Engine", layout="wide")
 st.title("📊 VaR Engine Web App")
 
-# --- Fast sanity info (helps debug path issues) ---
 with st.expander("Debug info"):
     st.write("CWD:", os.getcwd())
     st.write("Engine path exists:", os.path.exists(ENGINE))
