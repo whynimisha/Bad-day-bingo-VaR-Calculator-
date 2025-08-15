@@ -1,0 +1,37 @@
+name: Daily VaR Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 4 * * 1-5"   # 04:30 UTC ≈ 10:00 IST on weekdays
+
+permissions:
+  contents: write
+
+jobs:
+  run-var:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run VaR engine
+        run: |
+          python var_engine.py --mode t --df 6 --horizon 1 --scenarios 20000 --kde
+      - name: Copy artifacts to reports/
+        run: |
+          mkdir -p reports
+          cp outputs/*.png reports/ || true
+          cp outputs/results.json reports/results.json || true
+      - name: Commit report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports
+          git commit -m "Auto: daily VaR report" || echo "No changes"
+          git push
