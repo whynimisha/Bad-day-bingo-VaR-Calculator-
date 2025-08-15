@@ -8,19 +8,17 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import math
 
-# ---------- Config ----------
 DEFAULT_WINDOW = 250       # trading days for vol/corr estimation (~1y)
 DEFAULT_SCENARIOS = 10000  # Monte Carlo paths
 DEFAULT_ALPHA = 0.95       # VaR/CVaR confidence
 
-# ---------- Data structures ----------
+
 @dataclass
 class Position:
     symbol: str
     qty: float
     price: float  # if NaN, we'll fetch last price
     multiplier: float
-# --- Backtest diagnostics: Kupiec POF, Christoffersen, Basel ---
 try:
     from scipy.stats import chi2
     chi2_sf = lambda x, df: chi2.sf(x, df)   # survival function = 1 - CDF
@@ -38,14 +36,12 @@ def kupiec_pof(n, x, alpha):
         return float("nan"), float("nan")
     p = 1 - alpha
     if x == 0 or x == n:
-        # handle log(0) edge cases by tiny jitter
         x = max(1e-12, min(n - 1e-12, x))
     LR = -2 * (
         (n - x) * math.log(1 - p) + x * math.log(p)
         - ((n - x) * math.log(1 - x / n) + x * math.log(x / n))
     )
     return LR, chi2_sf(LR, 1)
-
 def christoffersen_independence(hits):
     """
     hits: list/array of 0/1 where 1 = breach.
@@ -61,7 +57,6 @@ def christoffersen_independence(hits):
         elif a == 0 and b == 1: n01 += 1
         elif a == 1 and b == 0: n10 += 1
         else: n11 += 1
-    # transition probabilities
     denom0 = n00 + n01
     denom1 = n10 + n11
     if denom0 == 0 or denom1 == 0:
@@ -91,14 +86,11 @@ def basel_traffic_light_99(n, x):
         if x <= 9:  return "yellow"
         return "red"
     return "N/A"
-
-
-# ---------- Helpers ----------
 def cov_to_corr(cov):
     """Convert a covariance matrix to a correlation matrix."""
     stddev = np.sqrt(np.diag(cov))
     corr = cov / np.outer(stddev, stddev)
-    corr[corr > 1] = 1  # avoid floating-point overflow >1
+    corr[corr > 1] = 1  
     corr[corr < -1] = -1
     return corr
 def read_portfolio(csv_path: str) -> List[Position]:
@@ -131,11 +123,9 @@ def fetch_prices(symbols: List[str], window: int) -> pd.DataFrame:
         progress=False, group_by="ticker", threads=False
     )
 
-    # Normalize to a flat DataFrame with columns = symbols
     if isinstance(data.columns, pd.MultiIndex):
         close_cols = []
         for s in symbols:
-            # Yahoo sometimes omits a ticker; guard it
             try:
                 ser = data[(s, "Close")].astype(float)
                 ser.name = s
@@ -144,7 +134,6 @@ def fetch_prices(symbols: List[str], window: int) -> pd.DataFrame:
                 pass
         prices = pd.concat(close_cols, axis=1)
     else:
-        # Single symbol case comes as a Series or DataFrame with 'Close'
         if "Close" in data:
             prices = data["Close"].to_frame()
         else:
@@ -167,12 +156,10 @@ def log_returns(prices: pd.DataFrame) -> pd.DataFrame:
     return np.log(prices / prices.shift(1)).dropna()
 
 def ensure_pos_def(Sigma: np.ndarray, jitter: float = 1e-8) -> np.ndarray:
-    # make covariance numerically positive-definite if needed
     try:
         np.linalg.cholesky(Sigma)
         return Sigma
     except np.linalg.LinAlgError:
-        # eigenvalue floor
         vals, vecs = np.linalg.eigh(Sigma)
         vals[vals < jitter] = jitter
         return (vecs @ np.diag(vals) @ vecs.T)
@@ -182,9 +169,8 @@ def simulate_pnl_normal(positions: List[Position], prices_now: pd.Series,
                  scenarios: int) -> np.ndarray:
     n = len(positions)
     L = np.linalg.cholesky(Sigma)
-    Z = np.random.normal(size=(n, scenarios))       # iid standard normals
-    R = (mu.reshape(-1,1) + L @ Z)                  # correlated returns
-    # Compute P&L = sum_i qty * price * multiplier * r_i
+    Z = np.random.normal(size=(n, scenarios))      
+    R = (mu.reshape(-1,1) + L @ Z)                 
     qty = np.array([p.qty for p in positions]).reshape(-1,1)
     px  = np.array([prices_now[p.symbol] for p in positions]).reshape(-1,1)
     mult= np.array([p.multiplier for p in positions]).reshape(-1,1)
@@ -201,8 +187,8 @@ def simulate_pnl_t(positions: List[Position], prices_now: pd.Series,
     n = len(positions)
     L = np.linalg.cholesky(Sigma)
     Z = np.random.normal(size=(n, scenarios))
-    U = np.random.chisquare(df, size=(1, scenarios))  # shape (1, scenarios)
-    scale = np.sqrt(U / df)                           # same for all assets per scenario
+    U = np.random.chisquare(df, size=(1, scenarios))  
+    scale = np.sqrt(U / df)                           
     R = (mu.reshape(-1,1) + (L @ Z) / scale)
 
     qty = np.array([p.qty for p in positions]).reshape(-1,1)
@@ -216,20 +202,18 @@ def historical_horizon_returns(rets_df: pd.DataFrame, h: int) -> np.ndarray:
     over rolling windows (no overlap drop). Returns array shape (n_assets, N)
     """
     if h <= 1:
-        return rets_df.values.T  # shape (n_assets, T)
-    # Rolling sum of log-returns approximates multi-day log-return
+        return rets_df.values.T  
     roll = rets_df.rolling(window=h).sum().dropna()
     return roll.values.T
 
 def simulate_pnl_historical(positions: List[Position], prices_now: pd.Series,
                             rets_df: pd.DataFrame, scenarios: int, horizon: int = 1) -> np.ndarray:
-    # Build empirical h-day return vectors
-    R_emp = historical_horizon_returns(rets_df, horizon)  # shape (n_assets, T_eff)
+    R_emp = historical_horizon_returns(rets_df, horizon)  
     if R_emp.size == 0:
         return np.array([])
     n_assets, T_eff = R_emp.shape
-    idx = np.random.randint(0, T_eff, size=scenarios)     # bootstrap with replacement
-    R = R_emp[:, idx]                                     # shape (n_assets, scenarios)
+    idx = np.random.randint(0, T_eff, size=scenarios)     
+    R = R_emp[:, idx]                                    
 
     qty = np.array([p.qty for p in positions]).reshape(-1,1)
     px  = np.array([prices_now[p.symbol] for p in positions]).reshape(-1,1)
@@ -239,8 +223,7 @@ def simulate_pnl_historical(positions: List[Position], prices_now: pd.Series,
 
 
 def var_cvar(losses: np.ndarray, alpha: float) -> Tuple[float, float]:
-    # losses = -pnl (positive is bad)
-    q = np.quantile(losses, alpha)  # e.g., alpha=0.95 -> 95th percentile loss
+    q = np.quantile(losses, alpha)  
     tail = losses[losses >= q]
     cvar = tail.mean() if tail.size > 0 else q
     return float(q), float(cvar)
@@ -252,7 +235,7 @@ def stress_table(positions: List[Position], prices_now: pd.Series,
     mult= np.array([p.multiplier for p in positions]).reshape(-1,1)
     rows = []
     for k in sigmas:
-        shock = (-k * vol).reshape(-1,1)            # all assets down kσ
+        shock = (-k * vol).reshape(-1,1)           
         pnl   = (qty * px * mult * shock).sum()
         rows.append({"Shock": f"-{k}σ all assets", "P&L": float(pnl)})
     return pd.DataFrame(rows)
@@ -267,16 +250,11 @@ def plot_hist(pnl: np.ndarray, alpha_levels: List[float], out_path: str, kde: bo
         kde = False
 
     plt.figure(figsize=(9,5))
-    # Histogram (density=True so KDE overlays properly)
     n, bins, _ = plt.hist(pnl, bins=80, density=True, alpha=0.5, label="P&L histogram")
-
-    # Optional KDE
     if kde and have_scipy and pnl.size > 10:
         xs = np.linspace(pnl.min(), pnl.max(), 600)
         kde_est = gaussian_kde(pnl)
         plt.plot(xs, kde_est(xs), label="KDE")
-
-    # VaR lines (colored)
     for a, color in zip(alpha_levels, ["tab:red", "tab:purple"]):
         q_loss = np.quantile(losses, a)
         x = -q_loss
@@ -372,7 +350,7 @@ def var_ci_from_losses(losses: np.ndarray, alpha: float = 0.95, level: int = 90,
         return float("nan"), float("nan")
     qs = []
     for _ in range(boot):
-        idx = np.random.randint(0, n, size=n)   # uses np.random.seed if set
+        idx = np.random.randint(0, n, size=n)   
         bs = losses[idx]
         qs.append(np.quantile(bs, alpha))
     lo = np.percentile(qs, (100 - level) / 2)
@@ -400,7 +378,6 @@ def fetch_price_data(tickers, window_days, extra_buffer_days=40):
     """
     series = []
     for t in tickers:
-        # buffer a few extra days to survive holidays / missing bars
         df = yf.download(
             t,
             period=f"{window_days + extra_buffer_days}d",
@@ -414,15 +391,10 @@ def fetch_price_data(tickers, window_days, extra_buffer_days=40):
         s = df["Close"].astype(float)
         s.name = t
         series.append(s) 
-
-    # Inner join on dates all tickers have
     prices = pd.concat(series, axis=1, join="inner").sort_index()
-
-    # Keep only the last `window_days` observations
     return prices.tail(window_days)
 
 def main():
-    # -------- 1) Parse args --------
     parser = argparse.ArgumentParser(description="Monte Carlo VaR Engine")
     parser.add_argument("--portfolio", default="portfolio.csv")
     parser.add_argument("--window", type=int, default=DEFAULT_WINDOW)
@@ -447,20 +419,16 @@ def main():
 
 
     os.makedirs("outputs", exist_ok=True)
-
-    # -------- 2) Portfolio & prices --------
-    positions = read_portfolio(args.portfolio)          # List[Position]
+    positions = read_portfolio(args.portfolio)         
     symbols   = [p.symbol for p in positions]
     print(f"[1/6] Portfolio loaded. Symbols: {symbols}")
 
-    prices = fetch_price_data(symbols, args.window)     # DataFrame (cols = symbols)
+    prices = fetch_price_data(symbols, args.window)   
     if prices.empty:
         print("ERROR: no price data; check symbols/internet")
         sys.exit(1)
     returns = prices.pct_change().dropna()
     print(f"[3/6] Computed log returns. Shape={returns.shape}")
-
-    # -------- 3) Covariance with correlation stress --------
     Sigma_hist = returns.cov().values
     R_hist  = cov_to_corr(Sigma_hist)
     R_one   = np.ones_like(R_hist)
@@ -468,26 +436,18 @@ def main():
     np.fill_diagonal(R_stress, 1.0)
     std = np.sqrt(np.diag(Sigma_hist))
     Sigma = ensure_pos_def(np.outer(std, std) * R_stress)
-
-    # -------- 4) Drift (daily) --------
     if args.drift == "auto":
         mu_daily = returns.mean().values
     elif args.drift == "0":
         mu_daily = np.zeros(len(symbols))
     else:
         mu_daily = np.full(len(symbols), float(args.drift)/100.0/252.0)
-
-    # -------- 5) Current prices & fill overrides --------
     px_now = last_prices(prices)
     for p in positions:
         if np.isnan(p.price):
             p.price = float(px_now[p.symbol])
-    # ---- Portfolio notional and liquidity haircut ----
     total_value = sum(p.qty * p.price * p.multiplier for p in positions)
-    liq_loss_abs = (args.liq_haircut_bp / 10000.0) * total_value  # absolute haircut in currency
-
-
-    # -------- 6) Simulate for requested mode/horizon --------
+    liq_loss_abs = (args.liq_haircut_bp / 10000.0) * total_value  
     mode = args.mode
     horizon = max(1, args.horizon)
     print(f"[5/6] Mode={mode}, horizon={horizon} day(s), scenarios={args.scenarios}")
@@ -498,7 +458,6 @@ def main():
         if pnl.size == 0:
             print("ERROR: Historical simulation failed (not enough data)."); sys.exit(1)
     else:
-        # use zero mean unless you want to center by mu_daily
         mu_h, Sigma_h = scale_for_horizon(mu=mu_daily, Sigma=Sigma, h=horizon)
         if mode == "normal":
             pnl = simulate_pnl_normal(positions, px_now, mu=mu_h, Sigma=Sigma_h, scenarios=args.scenarios)
@@ -507,13 +466,11 @@ def main():
 
     print("[6/6] Simulation complete. Computing VaR/CVaR & saving outputs...")
 
-    # -------- 7) Metrics, stress, outputs --------
-    pnl_used = pnl - liq_loss_abs if args.liq_haircut_bp else pnl  # apply haircut once per evaluation
+    pnl_used = pnl - liq_loss_abs if args.liq_haircut_bp else pnl  
     losses   = -pnl_used
     var95, cvar95 = var_cvar(losses, 0.95)
     var99, cvar99 = var_cvar(losses, 0.99)
 
-    # Optional VaR CIs
     if args.ci:
         lo95, hi95 = var_ci_from_losses(losses, 0.95, args.ci, boot=400)
         lo99, hi99 = var_ci_from_losses(losses, 0.99, args.ci, boot=400)
@@ -525,7 +482,6 @@ def main():
     main_plot_path = f"outputs/pnl_hist_{args.horizon}d_{mode}.png"
     plot_hist(pnl, [0.95, 0.99], main_plot_path, kde=args.kde)
 
-    # Multi-horizon sweep (uses same Sigma/mu)
     horizons = [1, 5, 10, 20]
     sweep_results = horizon_sweep(
     positions, px_now, mu_daily, Sigma, returns,
@@ -537,7 +493,6 @@ def main():
     for row in sweep_results:
         print(f"{row['horizon_days']:>8} {row['VaR95']:>10.0f} {row['CVaR95']:>10.0f} "
               f"{row['VaR99']:>10.0f} {row['CVaR99']:>10.0f}")
-    # ---- Build results dict BEFORE backtest ----
     total_value = sum(p.qty * p.price * p.multiplier for p in positions)
 
     results = {
@@ -587,14 +542,9 @@ def main():
         "christoffersen": {"LR": LR_ind, "p_value": p_ind},
         "basel_zone_99": zone,
     }
-
-
-    # Finally write JSON
     with open("outputs/results.json", "w") as f:
         json.dump(results, f, indent=2)
 
-
-    # Console summary
     print("\n=== Portfolio ===")
     for p in positions:
         print(f"{p.symbol:12s} qty={p.qty:8.2f} price={p.price:10.2f} mult={p.multiplier:4.0f}")
@@ -609,5 +559,4 @@ def main():
     print("\nSaved: outputs/results.json and plots in outputs/")
 
 if __name__ == "__main__":
-    # np.random.seed(42)  # comment out for different samples each run
     main()
